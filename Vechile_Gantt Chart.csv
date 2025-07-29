@@ -1,39 +1,39 @@
-Arrival Time,Vehicle Type
-0:00,19'
-0:00,20'
-0:00,32' MA
-0:00,19'
-1:00,19'
-1:00,32' MA
-1:00,32'SXL
-1:00,32'SXL
-2:00,20'
-2:00,32'SXL
-3:00,20'
-3:00,32'SXL
-4:00,19'
-4:00,32'SXL
-4:30,32'SXL
-5:00,14'
-5:00,17'
-5:00,19'
-5:00,20'
-5:00,32'SXL
-5:30,20'
-6:00,20'
-6:00,32' MA
-6:00,32'SXL
-7:00,32'SXL
-8:00,32' MA
-9:30,19'
-11:00,32' MA
-11:00,32'SXL
-12:00,32' MA
-13:00,32' MA
-15:00,32' MA
-16:30,32' MA
-18:00,32' MA
-19:00,32' MA
-23:00,17'
-23:00,22'
-23:00,32' MA
+Arrival Time,Vehicle Type,Type,Hub Code
+0:00,19',Loading,HUB1
+0:00,20',Unloading,HUB2
+0:00,32' MA,Loading,HUB3
+0:00,19',Unloading,HUB2
+1:00,19',Loading,HUB1
+1:00,32' MA,Unloading,HUB4
+1:00,32'SXL,Loading,HUB3
+1:00,32'SXL,Unloading,HUB1
+2:00,20',Loading,HUB2
+2:00,32'SXL,Loading,HUB5
+3:00,20',Unloading,HUB1
+3:00,32'SXL,Loading,HUB4
+4:00,19',Loading,HUB2
+4:00,32'SXL,Unloading,HUB3
+4:30,32'SXL,Loading,HUB2
+5:00,14',Unloading,HUB5
+5:00,17',Loading,HUB1
+5:00,19',Loading,HUB4
+5:00,20',Unloading,HUB2
+5:00,32'SXL,Loading,HUB3
+5:30,20',Loading,HUB2
+6:00,20',Unloading,HUB1
+6:00,32' MA,Loading,HUB3
+6:00,32'SXL,Unloading,HUB5
+7:00,32'SXL,Loading,HUB2
+8:00,32' MA,Unloading,HUB4
+9:30,19',Loading,HUB1
+11:00,32' MA,Loading,HUB3
+11:00,32'SXL,Unloading,HUB2
+12:00,32' MA,Loading,HUB5
+13:00,32' MA,Loading,HUB1
+15:00,32' MA,Unloading,HUB4
+16:30,32' MA,Loading,HUB2
+18:00,32' MA,Loading,HUB3
+19:00,32' MA,Unloading,HUB5
+23:00,17',Loading,HUB1
+23:00,22',Unloading,HUB3
+23:00,32' MA,Loading,HUB2

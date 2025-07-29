@@ -318,6 +318,7 @@ def create_time_based_gantt_chart(df, operation_type, operation_mode, num_worker
     
     return fig
 
+# --- MAIN APP ---
 def main():
     st.set_page_config(page_title="Vehicle Loading/Unloading Analysis", layout="wide")
     
@@ -327,7 +328,7 @@ def main():
     # File upload
     st.header("📁 Upload Data")
     uploaded_file = st.file_uploader(
-        "Upload your CSV file with 'Arrival Time' and 'Vehicle Type' columns",
+        "Upload your CSV file with 'Arrival Time', 'Vehicle Type', 'Type', and 'Hub Code' columns",
         type=['csv']
     )
     
@@ -336,23 +337,21 @@ def main():
             df = pd.read_csv(uploaded_file)
             st.success("✅ File uploaded successfully!")
             
-            # Operation selection
+            # --- Hub selection ---
+            st.header("🏢 Select Hub")
+            hub_codes = df['Hub Code'].unique().tolist()
+            selected_hub = st.selectbox("Select Hub Code:", hub_codes)
+            df = df[df['Hub Code'] == selected_hub]
+            
+            # --- Operation Mode and Workers ---
             st.header("⚙️ Operation Settings")
-            col1, col2, col3 = st.columns(3)
-            
+            col1, col2 = st.columns(2)
             with col1:
-                operation_type = st.selectbox(
-                    "Select Operation Type:",
-                    ["Loading", "Unloading"]
-                )
-            
-            with col2:
                 operation_mode = st.selectbox(
                     "Select Operation Mode:",
                     ["Manual", "Machine"]
                 )
-            
-            with col3:
+            with col2:
                 num_workers = st.number_input(
                     "Number of Workers:",
                     min_value=1,
@@ -361,106 +360,184 @@ def main():
                     step=1
                 )
             
-            # Time calculations
+            # --- Time Calculations Table ---
             st.header("⏱️ Time Calculations")
-            
-            # Calculate times for each vehicle
             time_data = []
             for idx, row in df.iterrows():
                 vehicle_type = row['Vehicle Type']
                 arrival_time = row['Arrival Time']
+                operation_type = row['Type']  # Now from CSV
                 mapped_type = VEHICLE_MAPPING.get(vehicle_type, vehicle_type)
-                
                 # Get custom parcels if available in CSV
                 custom_parcels = None
                 if 'Parcels' in df.columns:
                     custom_parcels = row.get('Parcels')
                     if pd.isna(custom_parcels):
                         custom_parcels = None
-                
                 times = compute_times(mapped_type, operation_mode.lower(), custom_parcels)
                 if times:
                     original_time = times[operation_type.lower()]
                     adjusted_time = original_time / num_workers
-                    
                     # Get default parcel count for this vehicle type
                     default_parcels = None
                     for v in VEHICLES:
                         if v["type"] == mapped_type:
                             default_parcels = v['parcels']
                             break
-                    
                     time_data.append({
                         "Arrival Time": arrival_time,
                         "Original Type": vehicle_type,
                         "Mapped Type": mapped_type,
+                        "Operation": operation_type,
                         "Parcels Used": custom_parcels if custom_parcels is not None else f"{default_parcels} (default)",
                         f"{operation_type} Time (hours)": round(original_time, 2),
                         f"Adjusted Time ({num_workers} workers)": round(adjusted_time, 2)
                     })
-            
             time_df = pd.DataFrame(time_data)
             st.dataframe(time_df)
             
-            # Time-based Gantt Chart
+            # --- Time-based Gantt Chart ---
             st.header("📈 Time-Based Gantt Chart")
-            time_gantt_fig = create_time_based_gantt_chart(df, operation_type, operation_mode.lower(), num_workers)
-            
-            if time_gantt_fig:
-                st.plotly_chart(time_gantt_fig, use_container_width=True)
+            gantt_tasks = []
+            current_time = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            for idx, row in df.iterrows():
+                vehicle_type = row['Vehicle Type']
+                arrival_time = parse_time(row['Arrival Time'])
+                operation_type = row['Type']
+                mapped_type = VEHICLE_MAPPING.get(vehicle_type, vehicle_type)
+                custom_parcels = None
+                if 'Parcels' in df.columns:
+                    custom_parcels = row.get('Parcels')
+                    if pd.isna(custom_parcels):
+                        custom_parcels = None
+                times = compute_times(mapped_type, operation_mode.lower(), custom_parcels)
+                if not times:
+                    continue
+                operation_time = times[operation_type.lower()] / num_workers
+                start_time = current_time + timedelta(hours=arrival_time.hour, minutes=arrival_time.minute)
+                total_minutes = arrival_time.hour * 60 + arrival_time.minute + (operation_time * 60)
+                end_hour = int((total_minutes // 60) % 24)
+                end_minute = int(total_minutes % 60)
+                end_time = current_time + timedelta(hours=end_hour, minutes=end_minute)
+                if end_time < start_time:
+                    midnight = current_time + timedelta(hours=24)
+                    gantt_tasks.append(dict(
+                        Task=f"Vehicle {idx+1} (Part 1)",
+                        Start=start_time,
+                        Finish=midnight,
+                        Resource=operation_type
+                    ))
+                    gantt_tasks.append(dict(
+                        Task=f"Vehicle {idx+1} (Part 2)",
+                        Start=current_time,
+                        Finish=end_time,
+                        Resource=operation_type
+                    ))
+                else:
+                    gantt_tasks.append(dict(
+                        Task=f"Vehicle {idx+1}",
+                        Start=start_time,
+                        Finish=end_time,
+                        Resource=operation_type
+                    ))
+            if gantt_tasks:
+                fig = ff.create_gantt(gantt_tasks,
+                                     colors={'Loading': '#1f77b4', 'Unloading': '#ff7f0e'},
+                                     index_col='Resource',
+                                     show_colorbar=True,
+                                     group_tasks=True,
+                                     title=f"Vehicle Loading/Unloading Schedule ({operation_mode.title()}) - {selected_hub}")
+                fig.update_layout(
+                    xaxis_title="Time",
+                    yaxis_title="Vehicles",
+                    height=200 + len(gantt_tasks) * 15,
+                    showlegend=True
+                )
+                fig.update_xaxes(
+                    tickformat="%H:%M",
+                    tickmode='array',
+                    tickvals=[current_time + timedelta(hours=h) for h in range(0, 24)],
+                    ticktext=[f"{h:02d}:00" for h in range(0, 24)],
+                    side='top',
+                    rangeslider_visible=False,
+                    rangeselector_visible=False
+                )
+                fig.update_yaxes(showticklabels=False)
+                st.plotly_chart(fig, use_container_width=True)
             else:
                 st.warning("⚠️ Could not create time-based Gantt chart. Check vehicle type mappings.")
             
-            # Hourly workload
+            # --- Hourly Workload ---
             st.header("📊 Hourly Workload Analysis")
-            hourly_workload = calculate_hourly_workload(df, operation_type, operation_mode.lower(), num_workers)
-            
-            if hourly_workload:
-                # Create bar chart
-                hours = list(hourly_workload.keys())
-                counts = list(hourly_workload.values())
-                
+            hourly_data = {}
+            for idx, row in df.iterrows():
+                vehicle_type = row['Vehicle Type']
+                arrival_time = parse_time(row['Arrival Time'])
+                operation_type = row['Type']
+                mapped_type = VEHICLE_MAPPING.get(vehicle_type, vehicle_type)
+                custom_parcels = None
+                if 'Parcels' in df.columns:
+                    custom_parcels = row.get('Parcels')
+                    if pd.isna(custom_parcels):
+                        custom_parcels = None
+                times = compute_times(mapped_type, operation_mode.lower(), custom_parcels)
+                if not times:
+                    continue
+                operation_time = times[operation_type.lower()] / num_workers
+                total_minutes = arrival_time.hour * 60 + arrival_time.minute + (operation_time * 60)
+                end_hour = int((total_minutes // 60) % 24)
+                start_hour = arrival_time.hour
+                if end_hour < start_hour:
+                    for hour in range(start_hour, 24):
+                        if hour not in hourly_data:
+                            hourly_data[hour] = 0
+                        hourly_data[hour] += 1
+                    for hour in range(0, end_hour + 1):
+                        if hour not in hourly_data:
+                            hourly_data[hour] = 0
+                        hourly_data[hour] += 1
+                else:
+                    for hour in range(start_hour, end_hour + 1):
+                        if hour not in hourly_data:
+                            hourly_data[hour] = 0
+                        hourly_data[hour] += 1
+            if hourly_data:
+                hours = list(hourly_data.keys())
+                counts = list(hourly_data.values())
                 fig = go.Figure(data=[
                     go.Bar(x=hours, y=counts, 
                           marker_color='lightblue',
                           text=counts,
                           textposition='auto')
                 ])
-                
                 fig.update_layout(
-                    title=f"Number of Vehicles Being {operation_type} per Hour ({operation_mode}) - {num_workers} Workers",
+                    title=f"Number of Vehicles Being Worked per Hour ({operation_mode}) - {num_workers} Workers - {selected_hub}",
                     xaxis_title="Hour of Day",
                     yaxis_title="Number of Vehicles",
                     height=400
                 )
-                
                 st.plotly_chart(fig, use_container_width=True)
-                
-                # Display table
                 workload_df = pd.DataFrame([
                     {"Hour": hour, "Vehicles": count}
-                    for hour, count in sorted(hourly_workload.items())
+                    for hour, count in sorted(hourly_data.items())
                 ])
                 st.dataframe(workload_df)
             else:
                 st.warning("⚠️ Could not calculate hourly workload.")
-                
         except Exception as e:
             st.error(f"❌ Error processing file: {str(e)}")
-            st.info("Please ensure your CSV has 'Arrival Time' and 'Vehicle Type' columns.")
-    
+            st.info("Please ensure your CSV has 'Arrival Time', 'Vehicle Type', 'Type', and 'Hub Code' columns.")
     else:
         st.info("📤 Please upload a CSV file to begin analysis.")
-        
-        # Show expected format
         st.subheader("📋 Expected CSV Format")
         sample_data = {
             "Arrival Time": ["0:00", "1:00", "2:00"],
-            "Vehicle Type": ["19'", "32' MA", "32'SXL"]
+            "Vehicle Type": ["19'", "32' MA", "32'SXL"],
+            "Type": ["Loading", "Unloading", "Loading"],
+            "Hub Code": ["HUB1", "HUB2", "HUB3"]
         }
         sample_df = pd.DataFrame(sample_data)
         st.dataframe(sample_df)
-        
         st.markdown("""
         **Supported Vehicle Types:**
         - 19' → Eicher 19 ft
